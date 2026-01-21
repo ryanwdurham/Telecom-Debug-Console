@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Telecom Debug Console </title>
+<style>
+body { font-family: Consolas, monospace; background:#020617; color:#e5e7eb; padding:20px; }
+h1 { text-align:center; color:#38bdf8; }
+.container { max-width:1500px; margin:auto; }
+.controls { display:flex; justify-content:space-between; margin-bottom:12px; }
+button, select { background:#38bdf8; border:none; padding:6px 10px; border-radius:6px; font-weight:bold; cursor:pointer; }
+.panel { border:1px solid #1e293b; border-radius:8px; padding:10px; background:#020617; max-height:70vh; overflow:auto; }
+#timeline { display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; margin-bottom:10px; }
+.lane { border-left:1px solid #1e293b; padding-left:8px; min-height:20px; position:relative; }
+.log { font-size:12px; white-space:pre-wrap; margin:2px 0; padding:2px 4px; border-radius:4px; cursor:pointer; }
+.tls { color:#a78bfa; background:#1e293b; }
+.sip { color:#38bdf8; background:#1e293b; }
+.rtp { color:#facc15; background:#1e293b; }
+.json { color:#22c55e; background:#1e293b; }
+.error { color:#ef4444; background:#1e293b; }
+.highlight { background:#334155; }
+</style>
+</head>
+<body>
+
+<h1>📡 Telecom Debug Console </h1>
+
+<div class="container">
+  <div class="controls">
+    <button onclick="simulateCall()">▶ Simulate Call</button>
+    <select id="errorMode">
+      <option value="none">Normal</option>
+      <option value="401">401 Unauthorized</option>
+      <option value="503">503 Service Unavailable</option>
+      <option value="cert">Expired Certificate</option>
+    </select>
+  </div>
+
+  <div class="panel">
+    <div id="timeline">
+      <div class="lane" id="caller"><strong>Caller</strong></div>
+      <div class="lane" id="server"><strong>Server</strong></div>
+      <div class="lane" id="callee"><strong>Callee</strong></div>
+    </div>
+  </div>
+
+  <div class="panel" id="fullLog"></div>
+</div>
+
+<script>
+function ts(offsetMs){ return new Date(Date.now()+offsetMs).toISOString(); }
+
+function simulateCall(){
+  const caller = document.getElementById("caller");
+  const server = document.getElementById("server");
+  const callee = document.getElementById("callee");
+  const fullLog = document.getElementById("fullLog");
+  caller.innerHTML="<strong>Caller</strong>"; server.innerHTML="<strong>Server</strong>"; callee.innerHTML="<strong>Callee</strong>";
+  fullLog.innerHTML="";
+  const error = document.getElementById("errorMode").value;
+
+  const events = [
+    {lane:"caller", type:"tls", msg:"[TLS] ClientHello TLS1.3 Ciphers=TLS_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256"},
+    {lane:"server", type:"tls", msg:"[TLS] ServerHello SelectedCipher=TLS_AES_256_GCM_SHA384"},
+    {lane:"server", type:error==="cert"?"error":"tls", msg:error==="cert"? "[TLS][ERROR] Certificate expired!":"[TLS] Certificate OK CN=sip.provider.com OCSP=GOOD"},
+    {lane:"caller", type:"tls", msg:"[TLS] Handshake complete"},
+    {lane:"caller", type:"json", msg:`[AUTH] JWT Token Payload sub=alice@provider.com`},
+    {lane:"caller", type:"sip", msg:"REGISTER sip:provider.com SIP/2.0"},
+    {lane:"server", type:"sip", msg:"SIP/2.0 200 OK (REGISTER)"},
+    {lane:"caller", type:"sip", msg:"INVITE sip:bob@provider.com SIP/2.0"},
+    {lane:"server", type:"sip", msg:"SIP/2.0 100 Trying"},
+    {lane:"callee", type:"sip", msg:"SIP/2.0 180 Ringing"},
+  ];
+
+  if(error==="401") events.push({lane:"server", type:"error", msg:"SIP/2.0 401 Unauthorized WWW-Authenticate: Digest realm='provider.com'"});
+  else if(error==="503") events.push({lane:"server", type:"error", msg:"SIP/2.0 503 Service Unavailable Retry-After:30"});
+  else{
+    events.push({lane:"callee", type:"sip", msg:"SIP/2.0 200 OK"});
+    events.push({lane:"caller", type:"sip", msg:"ACK sip:bob@provider.com SIP/2.0"});
+    events.push({lane:"caller", type:"sip", msg:"SDP:\nv=0\no=- 46117326 2 IN IP4 192.168.1.10\nm=audio 49170 RTP/AVP 111 0 8\na=rtpmap:111 OPUS/48000/2\na=sendrecv"});
+    for(let i=10;i<=60;i+=10) events.push({lane:"caller", type:"rtp", msg:`[RTP] t=${i}s bitrate=64kbps jitter=${(2+i/60).toFixed(1)}ms loss=${(i/600).toFixed(2)}%`});
+    events.push({lane:"caller", type:"sip", msg:"BYE sip:bob@provider.com SIP/2.0"});
+    events.push({lane:"callee", type:"sip", msg:"SIP/2.0 200 OK (BYE)"});
+    events.push({lane:"json", type:"json", msg:"[CALL] Duration=60s Result=Completed"});
+  }
+
+  // Animate
+  let delay=0;
+  events.forEach((e,i)=>{
+    setTimeout(()=>{
+      const div=document.createElement("div");
+      div.className="log "+e.type; div.textContent=e.msg;
+      if(e.lane==="caller") caller.appendChild(div);
+      else if(e.lane==="server") server.appendChild(div);
+      else if(e.lane==="callee") callee.appendChild(div);
+      fullLog.appendChild(div.cloneNode(true));
+      fullLog.scrollTop = fullLog.scrollHeight;
+    }, delay);
+    delay+=600;
+  });
+}
+</script>
+
+</body>
+</html>
