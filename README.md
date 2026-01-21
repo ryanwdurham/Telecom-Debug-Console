@@ -2,7 +2,7 @@
 
 **Telecom Debug Console** is a browser-based simulator that visualizes **IMS / SIP + TLS call flows**, giving developers and test engineers a realistic debugging experience without requiring a live call. It is designed for learning, testing, and demoing telecom signaling and media stack behavior.
 
-Click Here to use:  
+Click here to use:  https://ryanwdurham.github.io/Telecom-Debug-Console/ 
 ---
 
 ## Features
